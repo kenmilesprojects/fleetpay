@@ -1,7 +1,8 @@
+
 import React, { useMemo, useState } from 'react';
-import { getActiveAccount, getActiveSettings, getCurrencySymbol } from '../db';
+import { getActiveAccount, getActiveSettings, getCurrencySymbol } from '../../db';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Users, Truck, Wallet, AlertCircle, Building2, TrendingUp, Calendar, ArrowUpRight, Lock, ShieldAlert, UserCog, Fingerprint, ShieldCheck, Zap, Loader2 } from 'lucide-react';
+import { Users, AlertCircle, Lock, ShieldAlert, UserCog, Fingerprint, ShieldCheck, Zap, Loader2 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 
 interface DashboardProps {
@@ -45,7 +46,6 @@ export const Dashboard = ({ db, onRefresh }: DashboardProps) => {
   const generateInsight = async () => {
     setIsAnalyzing(true);
     try {
-      // Fix: Initialize GoogleGenAI right before the API call using process.env.API_KEY as per the guidelines.
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const prompt = `You are a fleet management AI assistant. Analyze these metrics for "${activeCompany.name}":
       - Active Crew: ${stats.activeDrivers}
@@ -56,12 +56,10 @@ export const Dashboard = ({ db, onRefresh }: DashboardProps) => {
       
       Provide a brief (2-sentence) professional assessment of fleet efficiency and one actionable recommendation for the manager.`;
       
-      // Fix: Use ai.models.generateContent to query the model and obtain a GenerateContentResponse.
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: prompt,
       });
-      // Fix: Directly access the .text property of the GenerateContentResponse object.
       setInsight(response.text || "Insight data stream interrupted.");
     } catch (error) {
       console.error("AI Advisor Error:", error);
@@ -131,11 +129,10 @@ export const Dashboard = ({ db, onRefresh }: DashboardProps) => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
         <StatCard title="Active Crew" value={stats.activeDrivers} icon={<Users size={24}/>} color="bg-blue-600" desc="Current staff registry" />
         <StatCard title="Node Staff" value={isEnterprise ? stats.teamCount : "0"} icon={<UserCog size={24}/>} color="bg-indigo-600" desc={isEnterprise ? "Managed endpoints" : "Upgrade to unlock"} />
-        <StatCard title="Node Credit" value={`${symbol}${stats.totalAdvances.toLocaleString()}`} icon={<Wallet size={24}/>} color="bg-amber-500" desc="Monthly advances issued" />
+        <StatCard title="Node Credit" value={`${symbol}${stats.totalAdvances.toLocaleString()}`} icon={<ShieldCheck size={24}/>} color="bg-amber-500" desc="Monthly advances issued" />
         <StatCard title="Pending" value={stats.pendingTrips} icon={<AlertCircle size={24}/>} color="bg-rose-500" desc="Trips awaiting settlement" />
       </div>
 
-      {/* AI Advisor Feature */}
       <div className="bg-indigo-50/50 border border-indigo-100 rounded-[3rem] p-10 flex flex-col md:flex-row items-center gap-8 shadow-inner group">
         <div className="w-20 h-20 bg-indigo-600 rounded-[2rem] flex items-center justify-center text-white shadow-2xl group-hover:scale-105 transition-transform">
           <Zap size={32} />
@@ -156,7 +153,7 @@ export const Dashboard = ({ db, onRefresh }: DashboardProps) => {
         <button 
           onClick={generateInsight}
           disabled={isAnalyzing}
-          className="px-10 py-5 bg-slate-950 text-white rounded-[2rem] font-black text-xs uppercase tracking-widest shadow-2xl hover:bg-indigo-600 transition-all flex items-center gap-3 disabled:opacity-50"
+          className="px-10 py-5 bg-slate-950 text-white rounded-[2rem] font-black text-xs uppercase tracking-widest shadow-2xl hover:bg-indigo-600 transition-all flex items-center justify-gap-3 disabled:opacity-50"
         >
           {isAnalyzing ? <Loader2 className="animate-spin" size={16} /> : <Zap size={16} />}
           {insight ? 'Regenerate' : 'Analyze Fleet'}
@@ -204,7 +201,6 @@ export const Dashboard = ({ db, onRefresh }: DashboardProps) => {
                  <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-4 bg-slate-50 rounded-[2.5rem] border border-dashed border-slate-200">
                     <Zap size={32} className="text-blue-500" />
                     <p className="text-xs font-black text-slate-400 uppercase leading-relaxed tracking-widest">Team access is exclusive to Enterprise clusters.</p>
-                    <button className="px-6 py-2 bg-blue-600 text-white text-[9px] font-black uppercase rounded-lg shadow-lg">Upgrade Now</button>
                  </div>
               ) : teamMembers.length === 0 ? (
                 <div className="text-center py-10">

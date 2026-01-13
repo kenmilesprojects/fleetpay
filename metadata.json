@@ -1,5 +1,5 @@
 {
-  "name": "FleetPay - Driver & Payroll Management",
+  "name": "FleetOps360 - Driver & Payroll Management",
   "description": "A comprehensive system for managing drivers, trip advances, deductions, and automated payroll calculations with prorated salary support and month-end closing features.",
   "requestFramePermissions": [
     "geolocation"

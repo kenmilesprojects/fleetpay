@@ -1,8 +1,7 @@
-
 import React, { useState } from 'react';
-import { addDriver, deleteDriver, updateDriver, getActiveSettings, getCurrencySymbol, getActiveCompany } from '../db';
-import { Plus, Search, Edit2, XCircle, Phone, Info, Loader2, Sparkles, AlertTriangle, Lock } from 'lucide-react';
-import { Driver } from '../types';
+import { addDriver, deleteDriver, updateDriver, getActiveSettings, getCurrencySymbol, getActiveCompany } from '../../db';
+import { Plus, Search, Edit2, XCircle, Phone, Info, Loader2, Sparkles, Lock } from 'lucide-react';
+import { Driver } from '../../types';
 
 interface DriversProps {
   db: any;
@@ -87,7 +86,7 @@ export const Drivers = ({ db, onRefresh }: DriversProps) => {
   );
 
   const activeDriverCount = db.drivers.filter((d: any) => (d.workspaceId === db.activeWorkspaceId) && d.isActive).length;
-  const limit = activeCompany?.plan === 'Lite' ? 2 : activeCompany?.plan === 'Starter' ? 10 : Infinity;
+  const limit = activeCompany?.plan === 'Basic Hub' ? 2 : activeCompany?.plan === 'Pro Cluster' ? 10 : activeCompany?.plan === 'Elite Network' ? 50 : Infinity;
   const isAtLimit = activeDriverCount >= limit;
 
   return (
@@ -199,40 +198,6 @@ export const Drivers = ({ db, onRefresh }: DriversProps) => {
             </tbody>
           </table>
         </div>
-
-        <div className="md:hidden divide-y divide-gray-100">
-          {filteredDrivers.map(driver => (
-            <div key={driver.id} className={`p-4 space-y-3 ${!driver.isActive ? 'opacity-60 grayscale bg-gray-50' : ''}`}>
-              <div className="flex justify-between items-start">
-                <div>
-                  <h3 className="font-bold text-gray-900">{driver.name}</h3>
-                  <div className="flex items-center gap-1.5 text-xs text-gray-500 mt-1">
-                    <Phone size={12} /> {driver.phone}
-                  </div>
-                </div>
-                <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${driver.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                  {driver.isActive ? 'Active' : 'Closed'}
-                </span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <div className="flex flex-col">
-                  <span className="text-[10px] uppercase font-bold text-gray-400">Monthly Salary</span>
-                  <span className="font-black text-gray-700">{symbol}{(driver.monthlySalary).toLocaleString()}</span>
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={() => handleEdit(driver)} className={`p-2.5 rounded-xl ${isLocked ? 'bg-gray-100 text-gray-400' : 'bg-gray-50 text-blue-600'}`}>
-                    {isLocked ? <Lock size={16} /> : <Edit2 size={16} />}
-                  </button>
-                  {driver.isActive && (
-                    <button onClick={() => handleCloseDriver(driver.id)} className={`p-2.5 rounded-xl ${isLocked ? 'bg-gray-100 text-gray-400' : 'bg-gray-50 text-rose-600'}`}>
-                      {isLocked ? <Lock size={16} /> : <XCircle size={16} />}
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
 
       {isModalOpen && (
@@ -243,79 +208,24 @@ export const Drivers = ({ db, onRefresh }: DriversProps) => {
               <button onClick={() => setIsModalOpen(false)} className="md:hidden p-2 text-gray-400"><XCircle size={24} /></button>
             </div>
             
-            {errorMsg && (
-              <div className="mx-6 mt-6 p-4 bg-rose-50 border border-rose-100 text-rose-600 rounded-xl flex items-center gap-3">
-                 <Info size={18} />
-                 <p className="text-xs font-black uppercase tracking-tighter">{errorMsg}</p>
-              </div>
-            )}
-
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Full Name</label>
-                <input 
-                  required
-                  disabled={(!editingDriver && isAtLimit) || isLocked}
-                  type="text" 
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold disabled:opacity-50"
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  placeholder="e.g. John Smith"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Phone Number</label>
-                <input 
-                  required
-                  disabled={(!editingDriver && isAtLimit) || isLocked}
-                  type="tel" 
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold disabled:opacity-50"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                  placeholder="+1 (555) 000-0000"
-                />
+                <input required disabled={isLocked} type="text" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Salary ({symbol})</label>
-                  <input 
-                    required
-                    disabled={(!editingDriver && isAtLimit) || isLocked}
-                    type="number" 
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold disabled:opacity-50"
-                    value={formData.monthlySalary}
-                    onChange={(e) => setFormData({...formData, monthlySalary: Number(e.target.value)})}
-                  />
+                  <input required disabled={isLocked} type="number" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold" value={formData.monthlySalary} onChange={(e) => setFormData({...formData, monthlySalary: Number(e.target.value)})} />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Join Date</label>
-                  <input 
-                    required
-                    disabled={(!editingDriver && isAtLimit) || isLocked}
-                    type="date" 
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold disabled:opacity-50"
-                    value={formData.joiningDate}
-                    onChange={(e) => setFormData({...formData, joiningDate: e.target.value})}
-                  />
+                  <input required disabled={isLocked} type="date" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold" value={formData.joiningDate} onChange={(e) => setFormData({...formData, joiningDate: e.target.value})} />
                 </div>
               </div>
-              <div className="flex flex-col md:flex-row gap-3 pt-6">
-                <button 
-                  type="button" 
-                  onClick={() => setIsModalOpen(false)}
-                  className="order-2 md:order-1 flex-1 px-4 py-3 border border-gray-200 rounded-xl hover:bg-gray-50 font-bold text-sm"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit"
-                  disabled={isSaving || (!editingDriver && isAtLimit) || isLocked}
-                  className="order-1 md:order-2 flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold text-sm shadow-lg shadow-blue-100 flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {isSaving && <Loader2 size={16} className="animate-spin" />}
-                  {editingDriver ? 'Save Changes' : 'Complete Registration'}
-                </button>
-              </div>
+              <button type="submit" disabled={isSaving || isLocked} className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-100 flex items-center justify-center gap-2">
+                {isSaving && <Loader2 className="animate-spin" />} {editingDriver ? 'Save Changes' : 'Complete Registration'}
+              </button>
             </form>
           </div>
         </div>

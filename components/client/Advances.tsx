@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { saveAdvance, deleteAdvance, getActiveSettings, getCurrencySymbol, getActiveCompany } from '../db';
+import { saveAdvance, deleteAdvance, getActiveSettings, getCurrencySymbol, getActiveCompany } from '../../db';
 import { Plus, Trash2, Wallet, Loader2, Lock } from 'lucide-react';
 
 interface AdvancesProps {
@@ -134,57 +133,16 @@ export const Advances = ({ db, onRefresh }: AdvancesProps) => {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Select Driver</label>
-                <select 
-                  required
-                  disabled={isLocked}
-                  className="w-full px-4 py-2 border rounded-lg outline-none disabled:opacity-50"
-                  value={formData.driverId}
-                  onChange={(e) => setFormData({...formData, driverId: e.target.value})}
-                >
+                <select required disabled={isLocked} className="w-full px-4 py-2 border rounded-lg outline-none" value={formData.driverId} onChange={(e) => setFormData({...formData, driverId: e.target.value})}>
                   <option value="">Choose a driver...</option>
                   {db.drivers.filter((d: any) => d.isActive && d.workspaceId === db.activeWorkspaceId).map((d: any) => (
                     <option key={d.id} value={d.id}>{d.name}</option>
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Amount ({symbol})</label>
-                <input 
-                  required
-                  disabled={isLocked}
-                  type="number"
-                  className="w-full px-4 py-2 border rounded-lg outline-none disabled:opacity-50"
-                  value={formData.amount}
-                  onChange={(e) => setFormData({...formData, amount: Number(e.target.value)})}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Date</label>
-                <input 
-                  required
-                  disabled={isLocked}
-                  type="date"
-                  className="w-full px-4 py-2 border rounded-lg outline-none disabled:opacity-50"
-                  value={formData.date}
-                  onChange={(e) => setFormData({...formData, date: e.target.value})}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Description</label>
-                <textarea 
-                  disabled={isLocked}
-                  className="w-full px-4 py-2 border rounded-lg outline-none h-24 disabled:opacity-50"
-                  value={formData.description}
-                  onChange={(e) => setFormData({...formData, description: e.target.value})}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button type="button" onClick={() => setShowForm(false)} className="flex-1 px-4 py-2 border rounded-lg font-medium">Cancel</button>
-                <button type="submit" disabled={isSaving || isLocked} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium flex items-center justify-center gap-2 disabled:opacity-50">
-                  {isSaving && <Loader2 size={16} className="animate-spin" />}
-                  Save
-                </button>
-              </div>
+              <button type="submit" disabled={isSaving || isLocked} className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium flex items-center justify-center gap-2">
+                {isSaving && <Loader2 className="animate-spin" size={16} />} Save
+              </button>
             </form>
           </div>
         )}

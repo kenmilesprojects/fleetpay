@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { saveDeduction, deleteDeduction, getActiveSettings, getCurrencySymbol, getActiveCompany } from '../db';
+import { saveDeduction, deleteDeduction, getActiveSettings, getCurrencySymbol, getActiveCompany } from '../../db';
 import { Plus, Trash2, ArrowDownCircle, AlertTriangle, X, Loader2, Lock } from 'lucide-react';
 
 interface DeductionsProps {
@@ -57,7 +56,6 @@ export const Deductions = ({ db, onRefresh }: DeductionsProps) => {
     }
   };
 
-  // Strictly filter by activeWorkspaceId
   const filteredDeductions = db.deductions.filter((d: any) => d.workspaceId === db.activeWorkspaceId);
   const activeDrivers = db.drivers.filter((d: any) => (d.isActive || d.is_active) && d.workspaceId === db.activeWorkspaceId);
 
@@ -100,14 +98,12 @@ export const Deductions = ({ db, onRefresh }: DeductionsProps) => {
               <p className="text-gray-400 font-black uppercase tracking-widest text-sm">No historical deductions recorded.</p>
             </div>
           ) : (
-            <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-xl shadow-gray-100/30 overflow-hidden">
+            <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-xl overflow-hidden">
               <table className="w-full text-left">
                 <thead className="bg-gray-50/50 text-[10px] font-black text-gray-400 uppercase tracking-widest">
                   <tr>
                     <th className="px-8 py-6">Driver</th>
                     <th className="px-6 py-6 text-right">Amount</th>
-                    <th className="px-6 py-6">Date</th>
-                    <th className="px-6 py-6">Reason</th>
                     <th className="px-8 py-6 text-right">Action</th>
                   </tr>
                 </thead>
@@ -115,20 +111,11 @@ export const Deductions = ({ db, onRefresh }: DeductionsProps) => {
                   {filteredDeductions.map((deduction: any) => {
                     const driver = db.drivers.find((d: any) => d.id === deduction.driverId);
                     return (
-                      <tr key={deduction.id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="px-8 py-6">
-                           <p className="font-black text-gray-800">{driver?.name || 'Unknown'}</p>
-                        </td>
+                      <tr key={deduction.id} className="hover:bg-gray-50/50">
+                        <td className="px-8 py-6"><p className="font-black text-gray-800">{driver?.name || 'Unknown'}</p></td>
                         <td className="px-6 py-6 text-rose-600 font-black text-right">-{symbol}{deduction.amount.toLocaleString()}</td>
-                        <td className="px-6 py-6 text-xs font-bold text-gray-400 uppercase">{deduction.date}</td>
-                        <td className="px-6 py-6">
-                           <div className="flex items-center gap-2 text-sm font-medium text-gray-500">
-                              <AlertTriangle size={14} className="text-amber-500" />
-                              {deduction.reason}
-                           </div>
-                        </td>
                         <td className="px-8 py-6 text-right">
-                          <button onClick={() => handleDelete(deduction.id)} className={`p-3 rounded-2xl transition-all ${isLocked ? 'text-gray-200' : 'text-gray-400 hover:text-rose-600 hover:bg-rose-50'}`}>
+                          <button onClick={() => handleDelete(deduction.id)} className={`p-3 rounded-2xl transition-all ${isLocked ? 'text-gray-200' : 'text-gray-400 hover:text-rose-600'}`}>
                             {isLocked ? <Lock size={18} /> : <Trash2 size={18} />}
                           </button>
                         </td>
@@ -140,70 +127,6 @@ export const Deductions = ({ db, onRefresh }: DeductionsProps) => {
             </div>
           )}
         </div>
-
-        {showForm && (
-          <div className="bg-white p-10 rounded-[2.5rem] border border-gray-100 shadow-2xl h-fit animate-in slide-in-from-right duration-300">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-black text-gray-800">New Entry</h2>
-              <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-rose-600 transition-colors"><X size={24} /></button>
-            </div>
-            
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Select Personnel</label>
-                <select 
-                  required
-                  disabled={isLocked}
-                  className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm focus:ring-4 focus:ring-rose-500/10 disabled:opacity-50"
-                  value={formData.driverId}
-                  onChange={(e) => setFormData({...formData, driverId: e.target.value})}
-                >
-                  <option value="">Choose Driver...</option>
-                  {activeDrivers.map((d: any) => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Penalty Amount ({symbol})</label>
-                <input 
-                  required
-                  disabled={isLocked}
-                  type="number"
-                  className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm focus:ring-4 focus:ring-rose-500/10 disabled:opacity-50"
-                  value={formData.amount}
-                  onChange={(e) => setFormData({...formData, amount: Number(e.target.value)})}
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Incident Date</label>
-                <input 
-                  required
-                  disabled={isLocked}
-                  type="date"
-                  className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm focus:ring-4 focus:ring-rose-500/10 disabled:opacity-50"
-                  value={formData.date}
-                  onChange={(e) => setFormData({...formData, date: e.target.value})}
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Explanation</label>
-                <textarea 
-                  required
-                  disabled={isLocked}
-                  className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm focus:ring-4 focus:ring-rose-500/10 h-32 disabled:opacity-50"
-                  placeholder="Reason for fine..."
-                  value={formData.reason}
-                  onChange={(e) => setFormData({...formData, reason: e.target.value})}
-                />
-              </div>
-              <button disabled={isSaving || isLocked} type="submit" className="w-full py-5 bg-rose-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest shadow-xl shadow-rose-100 hover:bg-rose-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                {isSaving && <Loader2 size={18} className="animate-spin" />}
-                {isLocked ? 'Locked' : 'Commit Entry'}
-              </button>
-            </form>
-          </div>
-        )}
       </div>
     </div>
   );

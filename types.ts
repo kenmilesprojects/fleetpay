@@ -1,15 +1,24 @@
 
-export type PlanTier = 'Lite' | 'Starter' | 'Enterprise';
+export type PlanTier = 'Basic Hub' | 'Pro Cluster' | 'Elite Network' | 'Enterprise';
 
 export interface PendingRequest {
   id: string;
   businessName: string;
   ownerName: string;
   email: string;
+  username: string;
   plan: PlanTier;
   amount: string;
+  durationMonths: number;
+  totalAmount: number;
+  finalAmount: number; 
+  couponCode?: string;
+  discountPercentage?: number;
   requestedAt: string;
   status: 'pending' | 'approved' | 'rejected';
+  upiId?: string;
+  upiEmail?: string;
+  paymentDetails?: string; 
 }
 
 export interface SettlementRequest {
@@ -18,6 +27,8 @@ export interface SettlementRequest {
   companyName: string;
   amount: number;
   paymentMode: string;
+  upiId?: string;
+  upiEmail?: string;
   paymentDetails?: string;
   status: 'pending' | 'approved' | 'rejected';
   createdAt: string;
@@ -28,9 +39,15 @@ export interface UpgradeRequest {
   companyId: string;
   companyName: string;
   requestedPlan: PlanTier;
+  durationMonths: number;
+  totalAmount: number;
   paymentMethod: 'UPI' | 'CARD';
+  upiId?: string;
+  upiEmail?: string;
   paymentDetails: {
-    upiApp?: 'GPay' | 'PhonePe' | 'BHIM' | 'Paytm';
+    upiApp?: string;
+    upiId?: string;
+    transactionEmail?: string;
     cardName?: string;
     cardOnName?: string;
     cardNumber?: string;
@@ -43,14 +60,18 @@ export interface UpgradeRequest {
 
 export interface CompanyDetails {
   id: string;
+  cusId?: string;
   name: string;
   owner: string;
   email: string;
+  username: string;
   phone?: string;
   companyAddress?: string;
   password?: string;
   recoveryCode?: string;
   plan: PlanTier;
+  planDuration?: number; 
+  startDate?: string;
   status: 'active' | 'suspended';
   isLocked: boolean;
   createdAt: string;
@@ -66,69 +87,28 @@ export interface Workspace {
   createdAt: string;
 }
 
-export interface Manager {
+export interface Truck {
   id: string;
   companyId: string;
-  workspaceId?: string;
-  name: string;
-  email: string;
-  password?: string;
-  canManageDrivers: boolean;
-  canManageAdvances: boolean;
-  canManageDeductions: boolean;
-  canManageTrips: boolean;
-  canClosePayroll: boolean;
-  createdAt: string;
+  workspaceId: string;
+  regNumber: string;
+  model: string;
+  truckType: string;
 }
 
-export interface Driver {
+export interface License {
   id: string;
-  workspaceId: string;
-  companyId: string;
-  name: string;
-  phone: string;
-  joiningDate: string;
-  monthlySalary: number;
-  isActive: boolean;
-}
-
-export interface Advance {
-  id: string;
-  workspaceId: string;
-  companyId: string;
   driverId: string;
-  amount: number;
-  date: string;
-  description: string;
+  licenseNumber: string;
+  expiryDate: string;
 }
 
-export interface Deduction {
+export interface Insurance {
   id: string;
-  workspaceId: string;
-  companyId: string;
-  driverId: string;
-  amount: number;
-  date: string;
-  reason: string;
-}
-
-export interface TripTemplate {
-  id: string;
-  workspaceId: string;
-  companyId: string;
-  name: string;
-  defaultAmount: number;
-}
-
-export interface Trip {
-  id: string;
-  workspaceId: string;
-  companyId: string;
-  driverId: string;
-  route: string;
-  date: string;
-  allowance: number;
-  status: 'pending' | 'completed';
+  truckId: string;
+  policyNumber: string;
+  provider: string;
+  expiryDate: string;
 }
 
 export interface AppSettings {
@@ -136,24 +116,11 @@ export interface AppSettings {
   calcType: 'prorated' | 'monthly';
   currency: string;
   paymentTypes: string[];
+  alertLicenseExpiry: boolean;
+  alertInsuranceExpiry: boolean;
 }
 
-export interface PayrollRecord {
-  id: string;
-  workspaceId: string;
-  companyId: string;
-  driverId: string;
-  month: string;
-  baseSalary: number;
-  daysInMonth: number;
-  activeDays: number;
-  totalAdvances: number;
-  totalDeductions: number;
-  totalAllowances: number;
-  finalSalary: number;
-  isProrated: boolean;
-  isClosed: boolean;
-  paymentType?: string;
-}
-
-export type ViewType = 'dashboard' | 'drivers' | 'advances' | 'deductions' | 'trips' | 'payroll' | 'settings' | 'admin-panel' | 'team';
+export type ViewType = 
+  | 'dashboard' | 'drivers' | 'advances' | 'deductions' | 'trips' | 'payroll' | 'settings' | 'team'
+  | 'trucks' | 'licenses' | 'insurance' | 'reports'
+  | 'admin-registry' | 'admin-provisioning' | 'admin-upgrades' | 'admin-audits' | 'admin-reset-key' | 'admin-reset-pass';

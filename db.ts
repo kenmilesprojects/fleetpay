@@ -1,21 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 import { Driver, Advance, Deduction, Trip, PayrollRecord, AppSettings, CompanyDetails, Workspace, TripTemplate, PlanTier, PendingRequest, SettlementRequest, Manager, UpgradeRequest } from './types';
 
-// Safe environment variable helper to prevent "Cannot read properties of undefined"
 const getEnvVar = (key: string, fallback: string): string => {
   try {
-    // Check for process.env (Standard in many environments)
     if (typeof process !== 'undefined' && process.env && process.env[key]) {
       return process.env[key] as string;
     }
-    // Check for import.meta.env (Vite standard)
     const metaEnv = (import.meta as any).env;
     if (metaEnv && metaEnv[key]) {
       return metaEnv[key] as string;
     }
-  } catch (e) {
-    // Fallback if access is restricted
-  }
+  } catch (e) {}
   return fallback;
 };
 
@@ -30,21 +25,28 @@ export const getCurrencySymbol = (currency: string) => {
     case 'EUR': return '€';
     case 'GBP': return '£';
     case 'JPY': return '¥';
-    default: return '$';
+    default: return '₹'; 
   }
 };
 
-export const requestSettingsOTP = async (email: string) => {
-  console.log(`[SECURE_AUTH] OTP requested for ${email}`);
-  return { success: true, message: 'OTP sent to registered email' };
+export const checkUsernameAvailability = async (username: string): Promise<boolean> => {
+  if (!username || username.length < 3) return false;
+  const formatted = username.toLowerCase().includes('@') ? username.toLowerCase() : `${username.toLowerCase()}@ft.in`;
+  const { data: company } = await supabase.from('companies').select('id').eq('username', formatted).maybeSingle();
+  if (company) return false;
+  const { data: pending } = await supabase.from('pending_requests').select('id').eq('username', formatted).maybeSingle();
+  if (pending) return false;
+  return true;
 };
 
-export const verifySettingsOTP = async (otp: string) => {
-  return otp === '123456';
+export const verifySellingKey = async (key: string) => {
+  // Verifies the key against the first platform admin's selling_key record
+  const { data, error } = await supabase.from('platform_admins').select('selling_key').eq('selling_key', key).limit(1).maybeSingle();
+  return !error && !!data;
 };
 
 export const verifyPlatformAdmin = async (email: string, pass: string) => {
-  const { data, error } = await supabase.from('platform_admins').select('id, email, role').eq('email', email.toLowerCase()).eq('password', pass).single();
+  const { data, error } = await supabase.from('platform_admins').select('*').eq('email', email.toLowerCase()).eq('password', pass).single();
   return (error || !data) ? null : data;
 };
 
@@ -63,7 +65,7 @@ export const verifyManagerLogin = async (email: string, pass: string) => {
   };
 };
 
-export const fetchFullDB = async (activeWorkspaceId: string | null, authEmail: string | null = null) => {
+export const fetchFullDB = async (activeWorkspaceId: string | null, authUsername: string | null = null) => {
   const { data: accounts } = await supabase.from('companies').select('*');
   const accountIds = (accounts || []).map(a => a.id);
 
@@ -75,12 +77,7 @@ export const fetchFullDB = async (activeWorkspaceId: string | null, authEmail: s
     supabase.from('upgrade_requests').select('*').order('created_at', { ascending: false })
   ]);
 
-  const workspaces = (workspacesRes.data || []).map((w: any) => ({ 
-    ...w, 
-    companyId: w.company_id, 
-    isPhoneVerified: !!w.is_phone_verified,
-    createdAt: w.created_at
-  }));
+  const workspaces = (workspacesRes.data || []).map((w: any) => ({ ...w, companyId: w.company_id, isPhoneVerified: !!w.is_phone_verified, createdAt: w.created_at }));
   const workspaceIds = workspaces.map(w => w.id);
   const wsToComp = new Map(workspaces.map(w => [w.id, w.company_id]));
 
@@ -107,9 +104,13 @@ export const fetchFullDB = async (activeWorkspaceId: string | null, authEmail: s
     activeCompanyId: activeCompId,
     companies: (accounts || []).map((a: any) => ({ 
       ...a, 
+      cusId: a.cus_id,
+      username: a.username,
       companyAddress: a.company_address,
       recoveryCode: a.recovery_code, 
       isLocked: !!a.is_locked,
+      planDuration: a.plan_duration || 1, 
+      startDate: a.start_date,
       createdAt: a.created_at 
     })),
     workspaces,
@@ -119,121 +120,150 @@ export const fetchFullDB = async (activeWorkspaceId: string | null, authEmail: s
     trips: (tripsRes.data || []).map((t: any) => ({ ...t, workspaceId: t.workspace_id, companyId: t.company_id, driverId: t.driver_id })),
     tripTemplates: (templatesRes.data || []).map((t: any) => ({ ...t, workspaceId: t.workspace_id, companyId: t.company_id, defaultAmount: t.default_amount })),
     payroll: (payrollRes.data || []).map((p: any) => ({ ...p, workspaceId: p.workspace_id, companyId: p.company_id, driverId: p.driver_id, isClosed: p.is_closed })),
-    pendingRequests: (pendingRes.data || []).map((r: any) => ({ ...r, businessName: r.business_name, ownerName: r.owner_name, requestedAt: r.created_at })),
-    settlementRequests: (settlementRes.data || []).map((s: any) => ({ ...s, companyId: s.company_id, companyName: s.company_name, paymentMode: s.payment_mode, paymentDetails: s.payment_details, createdAt: s.created_at })),
-    upgradeRequests: (upgradesRes.data || []).map((u: any) => ({ ...u, companyId: u.company_id, companyName: u.company_name, requestedPlan: u.requested_plan, paymentMethod: u.payment_method, paymentDetails: u.payment_details, createdAt: u.created_at })),
-    managers: (managersRes.data || []).map((m: any) => ({ 
-      ...m, 
-      companyId: m.company_id, 
-      workspaceId: m.workspace_id, 
-      canManageDrivers: m.can_manage_drivers, 
-      canManageAdvances: m.can_manage_advances, 
-      canManageDeductions: m.can_manage_deductions, 
-      canManageTrips: m.can_manage_trips, 
-      canClosePayroll: m.can_close_payroll 
+    pendingRequests: (pendingRes.data || []).map((r: any) => ({ 
+      ...r, 
+      businessName: r.business_name, ownerName: r.owner_name, username: r.username,
+      durationMonths: r.duration_months, totalAmount: r.total_amount, finalAmount: r.final_amount,
+      couponCode: r.coupon_code, discountPercentage: r.discount_percentage, requestedAt: r.created_at,
+      upiId: r.upi_id, upiEmail: r.upi_email, paymentDetails: r.payment_details
     })),
+    settlementRequests: (settlementRes.data || []).map((s: any) => ({ ...s, companyId: s.company_id, companyName: s.company_name, paymentMode: s.payment_mode, upiId: s.upi_id, upiEmail: s.upi_email, paymentDetails: s.payment_details, createdAt: s.created_at })),
+    upgradeRequests: (upgradesRes.data || []).map((u: any) => ({ ...u, companyId: u.company_id, companyName: u.company_name, requestedPlan: u.requested_plan, durationMonths: u.duration_months, totalAmount: u.total_amount, paymentMethod: u.payment_method, upiId: u.upi_id, upiEmail: u.upi_email, paymentDetails: u.payment_details, createdAt: u.created_at })),
+    managers: (managersRes.data || []).map((m: any) => ({ ...m, companyId: m.company_id, workspaceId: m.workspace_id, canManageDrivers: m.can_manage_drivers, canManageAdvances: m.can_manage_advances, canManageDeductions: m.can_manage_deductions, canManageTrips: m.can_manage_trips, canClosePayroll: m.can_close_payroll })),
     settings,
-    auth: { email: authEmail || '', instanceId: 'FP-V3-ENT' }
+    auth: { username: authUsername || '', instanceId: 'FO360-V1' }
   };
 };
 
-export const getActiveWorkspace = (db: any): Workspace => {
-  const authEmail = localStorage.getItem('fleetpay_auth_email');
-  const storedWsId = localStorage.getItem('fleetpay_active_ws');
-  
-  if (!authEmail) return db?.workspaces?.[0];
-
-  const userCompany = db?.companies?.find((c: any) => c.email.toLowerCase() === authEmail.toLowerCase());
-  if (!userCompany) return db?.workspaces?.[0];
-
-  const userWorkspaces = db?.workspaces?.filter((w: any) => w.companyId === userCompany.id);
-  const activeWs = userWorkspaces?.find((w: any) => w.id === storedWsId) || userWorkspaces?.[0];
-  
-  // Ensure the workspace actually belongs to the logged in user
-  if (activeWs && activeWs.companyId !== userCompany.id) {
-    return userWorkspaces?.[0] || db?.workspaces?.[0];
-  }
-  
-  return activeWs || db?.workspaces?.[0];
-};
-
 export const getActiveAccount = (db: any): CompanyDetails => {
-  const authEmail = localStorage.getItem('fleetpay_auth_email');
-  if (authEmail) {
-    const account = db?.companies?.find((c: any) => c.email.toLowerCase() === authEmail.toLowerCase());
+  const authUsername = localStorage.getItem('fleetpay_auth_username');
+  if (authUsername) {
+    const account = db?.companies?.find((c: any) => c.username?.toLowerCase() === authUsername.toLowerCase());
     if (account) return account;
   }
-  
-  const ws = getActiveWorkspace(db);
+  const ws = db?.workspaces?.[0];
   const account = db?.companies?.find((c: any) => c.id === ws?.companyId);
   return account || db?.companies?.[0];
 };
 
-export const getActiveCompany = getActiveAccount;
-
 export const getActiveSettings = (db: any): AppSettings => {
-  const ws = getActiveWorkspace(db);
-  return db?.settings?.[ws?.id || ''] || { workspaceId: ws?.id || '', calcType: 'prorated', currency: 'USD', paymentTypes: [] };
+  return db?.settings?.[db?.activeWorkspaceId] || {
+    workspaceId: db?.activeWorkspaceId || '',
+    calcType: 'prorated',
+    currency: 'INR',
+    paymentTypes: ['Cash', 'Bank Transfer', 'UPI']
+  };
 };
 
-export const updateAccountByEmail = async (email: string, updates: any) => {
+export const getActiveCompany = (db: any): CompanyDetails => {
+  return db?.companies?.find((c: any) => c.id === db?.activeCompanyId) || db?.companies?.[0];
+};
+
+export const getActiveWorkspace = (db: any): Workspace => {
+  return db?.workspaces?.find((w: any) => w.id === db?.activeWorkspaceId) || db?.workspaces?.[0];
+};
+
+export const updateAccountByUsername = async (username: string, updates: any) => {
   const mapped: any = {};
   if (updates.name !== undefined) mapped.name = updates.name;
   if (updates.owner !== undefined) mapped.owner = updates.owner;
-  if (updates.phone !== undefined) mapped.phone = updates.phone;
-  if (updates.companyAddress !== undefined) mapped.company_address = updates.companyAddress;
+  if (updates.email !== undefined) mapped.email = updates.email;
   if (updates.status !== undefined) mapped.status = updates.status;
   if (updates.isLocked !== undefined) mapped.is_locked = updates.isLocked;
   if (updates.password !== undefined) mapped.password = updates.password;
+  if (updates.recoveryCode !== undefined) mapped.recovery_code = updates.recoveryCode;
   if (updates.plan !== undefined) mapped.plan = updates.plan;
-  const { error } = await supabase.from('companies').update(mapped).eq('email', email.toLowerCase());
+  if (updates.planDuration !== undefined) mapped.plan_duration = updates.planDuration;
+  if (updates.startDate !== undefined) mapped.start_date = updates.startDate;
+  
+  const { error } = await supabase.from('companies').update(mapped).eq('username', username.toLowerCase());
   if (error) throw error;
 };
 
-export const deleteAccountByEmail = async (email: string) => {
-  const { error } = await supabase.from('companies').delete().eq('email', email.toLowerCase());
-  if (error) throw error;
+export const resetRecoveryCode = async (username: string) => {
+  const newRecovery = 'REC-' + Math.random().toString(36).slice(-4).toUpperCase() + '-' + Math.random().toString(36).slice(-4).toUpperCase();
+  await updateAccountByUsername(username, { recoveryCode: newRecovery });
+  return newRecovery;
 };
 
-export const saveWorkspace = async (workspace: Partial<Workspace>) => {
-  const payload = { 
-    company_id: workspace.companyId, 
-    name: workspace.name, 
-    address: workspace.address, 
-    phone: workspace.phone 
-  };
-  const { data, error } = await supabase.from('workspaces').upsert([workspace.id ? { ...payload, id: workspace.id } : payload]).select().single();
-  if (error) throw error;
-  if (!workspace.id) {
-    await supabase.from('settings').insert([{ workspace_id: data.id, calc_type: 'prorated', currency: 'USD', payment_types: ['Cash', 'Bank Transfer'] }]);
-  }
+export const resetPassword = async (username: string) => {
+  // Generate 9-character alphanumeric password
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let newPass = '';
+  for (let i = 0; i < 9; i++) newPass += chars.charAt(Math.floor(Math.random() * chars.length));
+  await updateAccountByUsername(username, { password: newPass });
+  return newPass;
 };
 
-export const deleteWorkspace = async (id: string) => {
-  const { error } = await supabase.from('workspaces').delete().eq('id', id);
-  if (error) throw error;
+export const toggleAccountLock = async (username: string, currentLock: boolean) => {
+  await updateAccountByUsername(username, { isLocked: !currentLock });
+};
+
+export const toggleAccountStatus = async (username: string, currentStatus: string) => {
+  await updateAccountByUsername(username, { status: currentStatus === 'active' ? 'suspended' : 'active' });
+};
+
+export const deleteAccountByUsername = async (username: string) => {
+  const { data: company } = await supabase.from('companies').select('id').eq('username', username.toLowerCase()).single();
+  if (!company) return;
+  await Promise.all([
+    supabase.from('workspaces').delete().eq('company_id', company.id),
+    supabase.from('drivers').delete().eq('company_id', company.id),
+    supabase.from('advances').delete().eq('company_id', company.id),
+    supabase.from('deductions').delete().eq('company_id', company.id),
+    supabase.from('trips').delete().eq('company_id', company.id),
+    supabase.from('payroll').delete().eq('company_id', company.id),
+    supabase.from('company_managers').delete().eq('company_id', company.id),
+    supabase.from('settlement_requests').delete().eq('company_id', company.id),
+    supabase.from('upgrade_requests').delete().eq('company_id', company.id)
+  ]);
+  await supabase.from('companies').delete().eq('id', company.id);
+};
+
+export const provisionCompany = async (client: any) => {
+  const pass = Math.random().toString(36).slice(-8).toUpperCase();
+  const recovery = 'REC-' + Math.random().toString(36).slice(-4).toUpperCase() + '-' + Math.random().toString(36).slice(-4).toUpperCase();
+  const cusId = 'cus' + Math.floor(100000 + Math.random() * 900000);
+  
+  const { data: company, error: cErr } = await supabase.from('companies').insert([{ 
+    name: client.name, 
+    owner: client.owner, 
+    email: client.email, 
+    username: client.username,
+    plan: client.plan, 
+    plan_duration: client.plan_duration || client.planDuration || 1,
+    start_date: new Date().toISOString().split('T')[0],
+    password: pass, 
+    recovery_code: recovery, 
+    cus_id: cusId,
+    status: 'active', 
+    is_locked: false 
+  }]).select().single();
+  
+  if (cErr) throw cErr;
+  
+  const { data: ws } = await supabase.from('workspaces').insert([{ company_id: company.id, name: client.name, address: 'Global Headquarters', phone: '000-000-0000' }]).select().single();
+  await supabase.from('settings').insert([{ workspace_id: ws.id, calc_type: 'prorated', currency: 'INR', payment_types: ['Cash', 'Bank Transfer', 'UPI'] }]);
+  
+  return { email: client.email, username: client.username, pass, recovery, business: client.name, cusId };
+};
+
+export const approvePendingRequest = async (request: any) => {
+  const creds = await provisionCompany({ 
+    name: request.businessName, owner: request.ownerName, email: request.email, 
+    username: request.username, plan: request.plan, planDuration: request.durationMonths 
+  });
+  await supabase.from('pending_requests').delete().eq('id', request.id);
+  return creds;
 };
 
 export const addDriver = async (workspaceId: string, companyId: string, driver: any) => {
-  const { error } = await supabase.from('drivers').insert([{ 
-    workspace_id: workspaceId, 
-    company_id: companyId,
-    name: driver.name, 
-    phone: driver.phone, 
-    joining_date: driver.joiningDate, 
-    monthly_salary: driver.monthlySalary, 
-    is_active: true 
-  }]);
+  const { error } = await supabase.from('drivers').insert([{ workspace_id: workspaceId, company_id: companyId, name: driver.name, phone: driver.phone, joining_date: driver.joining_date || driver.joiningDate, monthly_salary: driver.monthly_salary || driver.monthlySalary, is_active: true }]);
   if (error) throw error;
 };
 
-export const updateDriver = async (id: string, updates: any) => {
-  const { error } = await supabase.from('drivers').update({ 
-    name: updates.name, 
-    phone: updates.phone, 
-    joining_date: updates.joiningDate, 
-    monthly_salary: updates.monthlySalary 
-  }).eq('id', id);
+export const updateDriver = async (id: string, driver: any) => {
+  const { error } = await supabase.from('drivers').update({ name: driver.name, phone: driver.phone, joining_date: driver.joining_date || driver.joiningDate, monthly_salary: driver.monthly_salary || driver.monthlySalary }).eq('id', id);
   if (error) throw error;
 };
 
@@ -243,14 +273,7 @@ export const deleteDriver = async (id: string) => {
 };
 
 export const saveAdvance = async (workspaceId: string, companyId: string, advance: any) => {
-  const { error } = await supabase.from('advances').insert([{ 
-    workspace_id: workspaceId, 
-    company_id: companyId,
-    driver_id: advance.driverId, 
-    amount: advance.amount, 
-    date: advance.date, 
-    description: advance.description 
-  }]);
+  const { error } = await supabase.from('advances').upsert([{ workspace_id: workspaceId, company_id: companyId, driver_id: advance.driverId, amount: advance.amount, date: advance.date, description: advance.description, id: advance.id }]);
   if (error) throw error;
 };
 
@@ -260,14 +283,7 @@ export const deleteAdvance = async (id: string) => {
 };
 
 export const saveDeduction = async (workspaceId: string, companyId: string, deduction: any) => {
-  const { error } = await supabase.from('deductions').insert([{ 
-    workspace_id: workspaceId, 
-    company_id: companyId,
-    driver_id: deduction.driverId, 
-    amount: deduction.amount, 
-    date: deduction.date, 
-    reason: deduction.reason 
-  }]);
+  const { error } = await supabase.from('deductions').upsert([{ workspace_id: workspaceId, company_id: companyId, driver_id: deduction.driverId, amount: deduction.amount, date: deduction.date, reason: deduction.reason, id: deduction.id }]);
   if (error) throw error;
 };
 
@@ -277,16 +293,7 @@ export const deleteDeduction = async (id: string) => {
 };
 
 export const saveTrip = async (workspaceId: string, companyId: string, trip: any) => {
-  const payload = { 
-    workspace_id: workspaceId, 
-    company_id: companyId,
-    driver_id: trip.driverId, 
-    route: trip.route, 
-    date: trip.date, 
-    allowance: trip.allowance, 
-    status: trip.status 
-  };
-  const { error } = await supabase.from('trips').upsert([trip.id ? { ...payload, id: trip.id } : payload]);
+  const { error } = await supabase.from('trips').upsert([{ workspace_id: workspaceId, company_id: companyId, driver_id: trip.driverId, route: trip.route, date: trip.date, allowance: trip.allowance, status: trip.status, id: trip.id }]);
   if (error) throw error;
 };
 
@@ -295,145 +302,106 @@ export const deleteTrip = async (id: string) => {
   if (error) throw error;
 };
 
-export const finalizePayroll = async (records: any[]) => {
-  const mapped = records.map(r => ({ 
-    workspace_id: r.workspace_id, 
-    company_id: r.company_id,
-    driver_id: r.driver_id, 
-    month: r.month, 
-    base_salary: r.base_salary, 
-    days_in_month: r.days_in_month, 
-    active_days: r.active_days, 
-    total_advances: r.total_advances, 
-    total_deductions: r.total_deductions, 
-    total_allowances: r.total_allowances, 
-    final_salary: r.final_salary, 
-    is_prorated: r.is_prorated, 
-    is_closed: r.is_closed, 
-    payment_type: r.payment_type 
-  }));
-  const { error } = await supabase.from('payroll').insert(mapped);
+export const finalizePayroll = async (workspaceId: string, companyId: string, record: any) => {
+  const { error } = await supabase.from('payroll').upsert([{ workspace_id: workspaceId, company_id: companyId, driver_id: record.driverId, month: record.month, base_salary: record.baseSalary, total_advances: record.totalAdvances, total_deductions: record.totalDeductions, total_allowances: record.totalAllowances, final_salary: record.finalSalary, is_closed: true }]);
   if (error) throw error;
 };
 
-export const updateWorkspaceSettings = async (workspaceId: string, settings: any) => {
-  const updates: any = {};
-  if (settings.calcType) updates.calc_type = settings.calcType;
-  if (settings.currency) updates.currency = settings.currency;
-  if (settings.paymentTypes) updates.payment_types = settings.paymentTypes;
-  const { error } = await supabase.from('settings').update(updates).eq('workspace_id', workspaceId);
+export const saveWorkspace = async (workspace: any) => {
+  const { error } = await supabase.from('workspaces').update({ name: workspace.name, address: workspace.address, phone: workspace.phone }).eq('id', workspace.id);
   if (error) throw error;
 };
 
-export const saveTripTemplate = async (workspaceId: string, companyId: string, template: any) => {
-  const { error } = await supabase.from('trip_templates').insert([{ 
-    workspace_id: workspaceId, 
-    company_id: companyId,
-    name: template.name, 
-    default_amount: template.defaultAmount 
-  }]);
-  if (error) throw error;
-};
+// --- FIX: Added missing exported members ---
 
-export const deleteTripTemplate = async (id: string) => {
-  const { error } = await supabase.from('trip_templates').delete().eq('id', id);
-  if (error) throw error;
-};
-
-export const provisionCompany = async (client: any) => {
-  const pass = Math.random().toString(36).slice(-8).toUpperCase();
-  const recovery = 'REC-' + Math.random().toString(36).slice(-4).toUpperCase() + '-' + Math.random().toString(36).slice(-4).toUpperCase();
-  const { data: company, error: cErr } = await supabase.from('companies').insert([{ 
-    name: client.name, 
-    owner: client.owner, 
-    email: client.email, 
-    plan: client.plan, 
-    password: pass, 
-    recovery_code: recovery, 
-    status: 'active', 
-    is_locked: false 
-  }]).select().single();
-  if (cErr) throw cErr;
-  await saveWorkspace({ companyId: company.id, name: client.name, address: 'Global Headquarters', phone: '000-000-0000' });
-  return { email: client.email, pass, recovery, business: client.name };
-};
-
-export const submitPendingRequest = async (request: any) => {
-  const { error } = await supabase.from('pending_requests').insert([{
-    business_name: request.businessName,
-    owner_name: request.ownerName,
-    email: request.email,
-    plan: request.plan,
-    amount: request.amount,
-    status: 'pending'
-  }]);
-  if (error) throw error;
-};
-
-export const approvePendingRequest = async (request: any) => {
-  const creds = await provisionCompany({ name: request.businessName, owner: request.ownerName, email: request.email, plan: request.plan });
-  const { error } = await supabase.from('pending_requests').delete().eq('id', request.id);
-  if (error) throw error;
-  return creds;
-};
-
+/**
+ * Deletes a pending provisioning request from the database.
+ */
 export const deletePendingRequest = async (id: string) => {
   const { error } = await supabase.from('pending_requests').delete().eq('id', id);
   if (error) throw error;
 };
 
-export const submitUpgradeRequest = async (request: Partial<UpgradeRequest>) => {
-  const { error } = await supabase.from('upgrade_requests').insert([{
-    company_id: request.companyId,
-    company_name: request.companyName,
-    requested_plan: request.requestedPlan,
-    payment_method: request.paymentMethod,
-    payment_details: request.paymentDetails,
-    status: 'pending'
+/**
+ * Submits a new pending provisioning request.
+ */
+export const submitPendingRequest = async (request: any) => {
+  const { error } = await supabase.from('pending_requests').insert([{
+    business_name: request.businessName,
+    owner_name: request.ownerName,
+    email: request.email,
+    username: request.username,
+    plan: request.plan,
+    duration_months: request.durationMonths,
+    total_amount: request.totalAmount,
+    final_amount: request.finalAmount,
+    coupon_code: request.couponCode,
+    discount_percentage: request.discountPercentage,
+    upi_id: request.upiId,
+    upi_email: request.upiEmail
   }]);
   if (error) throw error;
 };
 
-export const approveUpgradeRequest = async (requestId: string, companyId: string, plan: PlanTier) => {
-  await supabase.from('upgrade_requests').update({ status: 'approved' }).eq('id', requestId);
-  await supabase.from('companies').update({ plan }).eq('id', companyId);
+/**
+ * Approves a settlement request and unlocks the associated company node.
+ */
+export const approveSettlementRequest = async (id: string, companyId: string) => {
+  const { error: sErr } = await supabase.from('settlement_requests').update({ status: 'approved' }).eq('id', id);
+  if (sErr) throw sErr;
+  const { error: cErr } = await supabase.from('companies').update({ is_locked: false }).eq('id', companyId);
+  if (cErr) throw cErr;
 };
 
-export const rejectUpgradeRequest = async (requestId: string) => {
-  await supabase.from('upgrade_requests').update({ status: 'rejected' }).eq('id', requestId);
-};
-
-export const submitSettlementRequest = async (companyId: string, companyName: string, amount: number, mode: string, details: string) => {
-  const { error } = await supabase.from('settlement_requests').insert([{ company_id: companyId, company_name: companyName, amount: amount, payment_mode: mode, payment_details: details, status: 'pending' }]);
+/**
+ * Rejects a settlement request.
+ */
+export const rejectSettlementRequest = async (id: string) => {
+  const { error } = await supabase.from('settlement_requests').update({ status: 'rejected' }).eq('id', id);
   if (error) throw error;
 };
 
-export const approveSettlementRequest = async (requestId: string, companyId: string) => {
-  await supabase.from('settlement_requests').update({ status: 'approved' }).eq('id', requestId);
-  await supabase.from('companies').update({ is_locked: false }).eq('id', companyId);
+/**
+ * Approves a plan upgrade request and updates the company's active tier.
+ */
+export const approveUpgradeRequest = async (id: string, companyId: string, plan: string) => {
+  const { error: uErr } = await supabase.from('upgrade_requests').update({ status: 'approved' }).eq('id', id);
+  if (uErr) throw uErr;
+  const { error: cErr } = await supabase.from('companies').update({ plan }).eq('id', companyId);
+  if (cErr) throw cErr;
 };
 
-export const rejectSettlementRequest = async (requestId: string) => {
-  await supabase.from('settlement_requests').update({ status: 'rejected' }).eq('id', requestId);
+/**
+ * Rejects a plan upgrade request.
+ */
+export const rejectUpgradeRequest = async (id: string) => {
+  const { error } = await supabase.from('upgrade_requests').update({ status: 'rejected' }).eq('id', id);
+  if (error) throw error;
 };
 
-export const saveManager = async (manager: Partial<Manager>) => {
-  const payload = { 
-    company_id: manager.companyId, 
-    workspace_id: manager.workspaceId, 
-    name: manager.name, 
-    email: manager.email, 
-    password: manager.password, 
-    can_manage_drivers: manager.canManageDrivers, 
-    can_manage_advances: manager.canManageAdvances, 
-    can_manage_deductions: manager.canManageDeductions, 
-    can_manage_trips: manager.canManageTrips, 
-    can_close_payroll: manager.canClosePayroll 
+/**
+ * Saves or updates a company manager's profile and permissions.
+ */
+export const saveManager = async (manager: any) => {
+  const mapped = {
+    company_id: manager.companyId,
+    workspace_id: manager.workspaceId,
+    name: manager.name,
+    email: manager.email,
+    password: manager.password,
+    can_manage_drivers: manager.canManageDrivers,
+    can_manage_advances: manager.canManageAdvances,
+    can_manage_deductions: manager.canManageDeductions,
+    can_manage_trips: manager.canManageTrips,
+    can_close_payroll: manager.canClosePayroll
   };
-  const { error } = await supabase.from('company_managers').upsert([manager.id ? { ...payload, id: manager.id } : payload]);
+  const { error } = await supabase.from('company_managers').upsert([manager.id ? { ...mapped, id: manager.id } : mapped]);
   if (error) throw error;
 };
 
+/**
+ * Deletes a manager from the company registry.
+ */
 export const deleteManager = async (id: string) => {
   const { error } = await supabase.from('company_managers').delete().eq('id', id);
   if (error) throw error;
